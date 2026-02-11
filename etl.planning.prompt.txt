@@ -1,0 +1,72 @@
+---
+name: "etl.planning"
+description: "Generate structured ETL microservice implementation plan"
+argument-hint: "Describe source system and integration scope"
+agent: "agent"
+---
+
+You are a principal data platform architect.
+
+Generate a complete implementation plan for an ETL microservice integrating a Trusted Source.
+
+Architecture layers:
+1. Ingestion
+2. Staging
+3. Mastering
+4. CMF (Canonical Model Framework)
+5. Publishing / Distribution
+
+Include:
+
+# 1. Executive Summary
+- Business objective
+- Regulatory / compliance context
+- Expected data volumes
+- SLAs
+
+# 2. High-Level Architecture
+- Component diagram (Mermaid)
+- Data flow sequence
+- Integration type (HTTP/JMS/gRPC/File/CDC)
+
+# 3. Layer-by-Layer Breakdown
+
+For each layer define:
+- Responsibilities
+- Data contract
+- Validation logic
+- Retry & idempotency strategy
+- Failure handling
+- Storage strategy
+- Observability metrics
+
+# 4. Data Strategy
+- Schema validation
+- Versioning (SCD2 if applicable)
+- Conflict resolution
+- Deduplication approach
+- Lineage capture
+
+# 5. Non-Functional Design
+- Throughput targets
+- Horizontal scalability
+- Timeout coordination
+- Resilience model
+- Audit logging
+
+# 6. Deployment Strategy
+- Environment plan
+- CI/CD approach
+- Rollback plan
+- Feature flags
+
+# 7. Risk Matrix
+Provide table with:
+Risk | Impact | Probability | Mitigation
+
+# 8. Phased Roadmap
+Phase 1 → MVP ingestion
+Phase 2 → Mastering + CMF
+Phase 3 → Distribution + Observability
+
+Return structured and production-ready output.
