@@ -1,0 +1,214 @@
+package com.example.mg.service;
+
+import com.example.mg.auth.TokenProvider;
+import com.example.mg.buffer.BufferedId;
+import com.example.mg.buffer.ReactiveIdBuffer;
+import com.example.mg.client.MgApiClient;
+import com.example.mg.config.MgProperties;
+import com.example.mg.mapper.ItemDetailsMapper;
+import com.example.mg.model.ItemDetails;
+import com.example.mg.state.MgApiState;
+import com.example.mg.store.ItemDetailsStore;
+
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import reactor.core.Disposable;
+import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
+
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
+
+@Service
+public class MgDetailsConsumer {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(MgDetailsConsumer.class);
+
+    private final ReactiveIdBuffer buffer;
+    private final MgApiClient api;
+    private final MgApiState state;
+    private final ItemDetailsStore store;
+    private final ItemDetailsMapper mapper;
+    private final MgProperties props;
+    private final TokenProvider tokenProvider;
+
+    /**
+     * subscription handle
+     */
+    private volatile Disposable subscription;
+
+    /**
+     * metrics
+     */
+    private final AtomicLong consumedCount =
+            new AtomicLong();
+
+    private final AtomicLong failedCount =
+            new AtomicLong();
+
+    public MgDetailsConsumer(
+            ReactiveIdBuffer buffer,
+            MgApiClient api,
+            MgApiState state,
+            ItemDetailsStore store,
+            ItemDetailsMapper mapper,
+            MgProperties props,
+            TokenProvider tokenProvider) {
+
+        this.buffer = buffer;
+        this.api = api;
+        this.state = state;
+        this.store = store;
+        this.mapper = mapper;
+        this.props = props;
+        this.tokenProvider = tokenProvider;
+    }
+
+    /**
+     * auto start at application boot
+     */
+    @PostConstruct
+    public void init() {
+        start();
+    }
+
+    /**
+     * start consumer safely
+     */
+    public synchronized void start() {
+
+        if (subscription != null &&
+                !subscription.isDisposed()) {
+
+            log.info("Consumer already running");
+            return;
+        }
+
+        log.info("Starting details consumer...");
+
+        subscription =
+                Mono.defer(tokenProvider::getToken)
+
+                        .flatMapMany(token ->
+
+                                buffer.stream()
+
+                                        .flatMap(
+                                                bid ->
+                                                        processOne(token, bid)
+                                                                .onErrorResume(e -> {
+
+                                                                    failedCount.incrementAndGet();
+
+                                                                    log.error(
+                                                                            "PROCESS FAILED id={}",
+                                                                            bid.id(),
+                                                                            e
+                                                                    );
+
+                                                                    // never kill stream
+                                                                    return Mono.empty();
+                                                                }),
+
+                                                props.getDetailConcurrency()
+                                        )
+                        )
+
+                        /*
+                         * if stream crashes — restart forever
+                         */
+                        .retryWhen(
+                                Retry.backoff(
+                                        Long.MAX_VALUE,
+                                        Duration.ofSeconds(5)
+                                )
+                        )
+
+                        .doOnError(e ->
+                                log.error("CONSUMER STREAM ERROR", e)
+                        )
+
+                        .subscribe(
+                                v -> {},
+                                e -> log.error("CONSUMER TERMINATED", e),
+                                () -> log.warn("CONSUMER COMPLETED")
+                        );
+    }
+
+    /**
+     * stop consumer
+     */
+    public void stop() {
+        if (subscription != null) {
+            subscription.dispose();
+        }
+    }
+
+    /**
+     * PROCESS SINGLE ID
+     */
+    private Mono<Void> processOne(String token,
+                                  BufferedId bid) {
+
+        consumedCount.incrementAndGet();
+
+        return state.markInProgress(
+                        bid.loadId(),
+                        bid.id()
+                )
+
+                /*
+                 * CALL DETAILS API
+                 */
+                .then(api.details(token, bid.id()))
+
+                /*
+                 * MAP → ItemDetails
+                 */
+                .map(mapper::toItemDetails)
+
+                /*
+                 * INSERT INTO DATABASE
+                 */
+                .flatMap(store::insert)
+
+                /*
+                 * COMPLETE
+                 */
+                .then(state.markComplete(
+                        bid.loadId(),
+                        bid.id()
+                ))
+
+                /*
+                 * ERROR STATE
+                 */
+                .onErrorResume(e ->
+                        state.markFailed(
+                                bid.loadId(),
+                                bid.id(),
+                                e.getMessage()
+                        )
+                );
+    }
+
+    /**
+     * monitoring helpers
+     */
+    public boolean isRunning() {
+        return subscription != null &&
+                !subscription.isDisposed();
+    }
+
+    public long consumedCount() {
+        return consumedCount.get();
+    }
+
+    public long failedCount() {
+        return failedCount.get();
+    }
+}
