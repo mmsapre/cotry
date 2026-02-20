@@ -1,0 +1,17 @@
+package com.example.mg.mapper;
+
+import com.example.mg.model.DetailResponse;
+import com.example.mg.model.ItemDetails;
+import org.springframework.stereotype.Component;
+
+@Component
+public class ItemDetailsMapper {
+
+    public ItemDetails toItemDetails(DetailResponse r) {
+
+        return new ItemDetails(
+                r.id(),
+                r.payload().toString()
+        );
+    }
+}
