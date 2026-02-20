@@ -1,0 +1,58 @@
+import com.fasterxml.jackson.databind.*;
+import java.util.*;
+
+public class JsonPathExploderForTablesaw {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    public static List<Map<String, Object>> explode(
+            String json,
+            String splitPath
+    ) throws Exception {
+
+        JsonNode root = MAPPER.readTree(json);
+        if (!root.isArray()) {
+            throw new IllegalArgumentException("Root JSON must be an array");
+        }
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        for (JsonNode element : root) {
+
+            if (!element.isObject()) continue;
+            ObjectNode obj = (ObjectNode) element;
+
+            JsonNode splitNode = obj.get(splitPath);
+            if (splitNode == null) continue;
+
+            // ---- common fields ----
+            Map<String, Object> common = new LinkedHashMap<>();
+            obj.fields().forEachRemaining(e -> {
+                if (!e.getKey().equals(splitPath)) {
+                    JsonNode v = e.getValue();
+                    common.put(
+                        e.getKey(),
+                        v.isValueNode() ? v.asText() : v
+                    );
+                }
+            });
+
+            // ---- CASE 1: splitPath is ARRAY ----
+            if (splitNode.isArray()) {
+                for (JsonNode item : splitNode) {
+                    Map<String, Object> row = new LinkedHashMap<>(common);
+                    row.put(splitPath, item.deepCopy());
+                    rows.add(row);
+                }
+            }
+            // ---- CASE 2: splitPath is OBJECT ----
+            else if (splitNode.isObject()) {
+                Map<String, Object> row = new LinkedHashMap<>(common);
+                row.put(splitPath, splitNode.deepCopy());
+                rows.add(row);
+            }
+        }
+
+        return rows;
+    }
+}
