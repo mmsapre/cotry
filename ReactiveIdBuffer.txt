@@ -1,0 +1,125 @@
+package com.example.mg.buffer;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
+
+import java.util.Collection;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.LockSupport;
+
+@Component
+public class ReactiveIdBuffer {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(ReactiveIdBuffer.class);
+
+    /**
+     * BOUNDED sink
+     */
+    private final Sinks.Many<BufferedId> sink =
+            Sinks.many()
+                 .multicast()
+                 .onBackpressureBuffer(
+                     10_000,   // capacity
+                     false
+                 );
+
+    /**
+     * Metrics
+     */
+    private final AtomicLong produced = new AtomicLong();
+    private final AtomicLong consumed = new AtomicLong();
+
+    /* =========================================================
+       PUSH METHODS
+       ========================================================= */
+
+    /**
+     * Push a SINGLE id
+     */
+    public void push(UUID loadId, String id) {
+        emit(new BufferedId(loadId, id));
+    }
+
+    /**
+     * Push MULTIPLE ids safely
+     */
+    public void pushAll(UUID loadId,
+                        Collection<String> ids) {
+
+        for (String id : ids) {
+            emit(new BufferedId(loadId, id));
+        }
+    }
+
+    /**
+     * Centralized emit with backpressure handling
+     */
+    private void emit(BufferedId bufferedId) {
+
+        produced.incrementAndGet();
+
+        sink.emitNext(
+            bufferedId,
+            (signalType, emitResult) -> {
+
+                if (emitResult == Sinks.EmitResult.FAIL_OVERFLOW) {
+
+                    log.warn(
+                        "BUFFER OVERFLOW (retrying): backlog={}",
+                        backlog()
+                    );
+
+                    // backoff instead of failing
+                    LockSupport.parkNanos(
+                        TimeUnit.MILLISECONDS.toNanos(5)
+                    );
+                    return true; // retry
+                }
+
+                if (emitResult.isFailure()) {
+                    log.error("Emit failed: {}", emitResult);
+                }
+
+                return false;
+            }
+        );
+    }
+
+    /* =========================================================
+       CONSUMER SIDE
+       ========================================================= */
+
+    public Flux<BufferedId> stream() {
+
+        return sink.asFlux()
+                   .doOnNext(v -> consumed.incrementAndGet())
+                   .doOnSubscribe(s ->
+                       log.info("Consumer subscribed to buffer")
+                   )
+                   .doOnCancel(() ->
+                       log.warn("Consumer unsubscribed from buffer")
+                   );
+    }
+
+    /* =========================================================
+       OBSERVABILITY
+       ========================================================= */
+
+    public long producedCount() {
+        return produced.get();
+    }
+
+    public long consumedCount() {
+        return consumed.get();
+    }
+
+    public long backlog() {
+        return produced.get() - consumed.get();
+    }
+}
