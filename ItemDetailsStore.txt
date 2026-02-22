@@ -1,0 +1,46 @@
+package com.example.mg.store;
+
+import com.example.mg.model.ItemDetails;
+import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+
+import java.util.List;
+
+@Service
+public class ItemDetailsStore {
+
+    private final DatabaseClient databaseClient;
+
+    public ItemDetailsStore(DatabaseClient databaseClient) {
+        this.databaseClient = databaseClient;
+    }
+
+    /**
+     * Batch insert ItemDetails using R2DBC DatabaseClient
+     */
+    public Mono<Void> insertBatch(List<ItemDetails> items) {
+
+        if (items == null || items.isEmpty()) {
+            return Mono.empty();
+        }
+
+        DatabaseClient.GenericExecuteSpec spec =
+                databaseClient.sql("""
+                    INSERT INTO mg_item_details (id, body)
+                    VALUES (:id, :body)
+                """);
+
+        for (ItemDetails item : items) {
+            spec = spec
+                    .bind("id", item.id())
+                    .bind("body", item.body())
+                    .add();
+        }
+
+        return spec
+                .fetch()
+                .rowsUpdated()
+                .then();
+    }
+}
