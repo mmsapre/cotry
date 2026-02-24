@@ -1,0 +1,14 @@
+{
+  "ruleId": "HIGH_VALUE_TRADE",
+  "table": "trade_details",
+  "condition": {
+    "and": [
+      { "field": "amount", "operator": ">", "value": 1000000 },
+      { "field": "status", "operator": "==", "value": "NEW" }
+    ]
+  },
+  "action": {
+    "type": "ROUTE",
+    "target": "HIGH_PRIORITY_QUEUE"
+  }
+}
