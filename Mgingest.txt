@@ -1,0 +1,31 @@
+graph TD
+    Start([Start MRD Scheduler]) --> Auth[OAuth Token]
+
+    subgraph Search_Phase [Rate-Limited Search & Persistence]
+        Auth --> SearchLimit{Rate Limiter<br/>Search API}
+        SearchLimit --> SearchAPI[MG Search API]
+        SearchAPI --> FluxSearch[Flux: Stream of MGIDs]
+        
+        %% R2DBC Persistence for Search
+        FluxSearch --> R2DBC_Temp[R2DBC: Save to<br/>Search Temp Table]
+    end
+
+    subgraph Backpressure_Buffer [Reactive Flow Control]
+        R2DBC_Temp --> Buffer[Flux.limitRate / Prefetch]
+        Buffer -- "Request(n)" --> SearchLimit
+    end
+
+    subgraph Ingestion_Phase [Parallel Detail Ingestion]
+        Buffer --> Parallel[Parallel Flux<br/>maxConcurrency]
+        Parallel --> DetailLimit{Rate Limiter<br/>Detail API}
+        DetailLimit --> DetailAPI[MG Detail API]
+        
+        %% R2DBC Persistence for Ingestion
+        DetailAPI --> R2DBC_Ingest[R2DBC: Save to<br/>Ingestion Table]
+    end
+
+    R2DBC_Ingest --> End([Process Complete])
+
+    style Search_Phase fill:#e8f5e9,stroke:#2e7d32
+    style Ingestion_Phase fill:#e3f2fd,stroke:#1565c0
+    style Backpressure_Buffer fill:#fff3e0,stroke:#ef6c00,stroke-dasharray: 5 5
