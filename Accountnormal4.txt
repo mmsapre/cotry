@@ -1,0 +1,36 @@
+graph TD
+    A[Account Updates] -->|Revived| B(Ingestion)
+    B --> C{Mastering Process}
+    C --> D[Account CMF Created]
+    
+    subgraph Parallel Processing
+        D -->|Async| E[Emit Audit Changes]
+        D -->|Sync| F[CMF Event]
+    end
+    
+    F --> G[Distribution]
+    G --> H[Mrd Mesh]
+    
+    E --> I[Account Policy Updater]
+    I --> J{Evaluate Event}
+    J -->|No Change| K[Ignore/Log]
+    J -->|Change Detected| L[Update 
+
+
+
+
+flowchart LR
+    subgraph Identification
+        BA[Business / BA / Product] -->|Identify| Grid[Account Grid/Criteria]
+    end
+    
+    subgraph Upload Mechanism
+        Grid --> Choice{Upload Method}
+        Choice -->|Automated| Script[Execution Script]
+        Choice -->|Manual| Portal[Upload Interface]
+    end
+    
+    Script --> Table[(Policy Tables)]
+    Portal --> Table
+    Table -.->|Reference| I[Account Policy Updater]
+
