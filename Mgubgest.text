@@ -1,0 +1,27 @@
+graph TD
+    Start([Start MRD Scheduler]) --> Auth[OAuth Token]
+
+    subgraph Producer [Upstream: Search Producer]
+        Auth --> SearchAPI[MG Search API]
+        SearchAPI --> TempDB[(Search Temp Table)]
+        TempDB --> Stream[Flux Stream]
+    end
+
+    subgraph Control [Backpressure & Flow Control]
+        Stream -- "Request(n)" --> SearchAPI
+        ParallelProcess -- "Signal: Busy" --> Stream
+    end
+
+    subgraph Consumer [Downstream: Parallel Consumers]
+        Stream --> ParallelProcess{Parallel Flux<br/>maxConcurrency}
+        ParallelProcess --> RateLimit[Rate Limiter / Conn Pool]
+        RateLimit --> DetailAPI[MG Detail API]
+        DetailAPI --> IngestDB[(Ingestion Table)]
+    end
+
+    %% Backpressure Visual Link
+    IngestDB -. "Subscription Demand" .-> Stream
+
+    style Producer fill:#f0f4c3,stroke:#827717
+    style Control fill:#fff9c4,stroke:#fbc02d,stroke-dasharray: 5 5
+    style Consumer fill:#e1f5fe,stroke:#01579b
