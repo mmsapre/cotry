@@ -1,0 +1,44 @@
+graph TD
+    Start([Account Updates Ingested]) --> Ingestion[(Ingestion Table)]
+    Ingestion --> Master[Mastering Process]
+    Master --> CMF[Create Account CMF]
+    
+    subgraph Parallel_Async_Flow [Async Parallel Processing After CMF]
+        direction TB
+        CMF --> Audit[Emit Audit Changes]
+        CMF --> Distribute[Distribution Service]
+    end
+
+    subgraph Distribution_Logic [Intelligent Distribution & Masking]
+        Distribute --> TypeCheck{Type: Cash or Security?}
+        
+        TypeCheck -->|Cash| QueryRule[Query In-Memory Rules]
+        TypeCheck -->|Security| QueryDB[Query Policy Database]
+        
+        QueryRule --> RuleEval{Check Blocklist}
+        QueryDB --> RuleEval
+        
+        RuleEval -- "In Blocklist" --> Mask[Execute Rule: Mask XPath Account No/Name]
+        RuleEval -- "Not Blocked" --> Pass[Pass Through Unmasked]
+        
+        Mask --> MeshPub[Publish Record]
+        Pass --> MeshPub
+    end
+
+    subgraph Audit_Evaluation [Audit Policy Logic]
+        Audit --> PolicyUpdater[Account Policy Updater]
+        PolicyUpdater --> Evaluate{Evaluate Event}
+        Evaluate -- "No Change" --> Ignore([Ignore / No Action])
+        Evaluate -- "Changes Found" --> StoreAudit[(Store Audit Record)]
+    end
+
+    subgraph Mesh_Distribution [Data Mesh Connectivity]
+        MeshPub --> MRDMesh[(MRD Mesh)]
+    end
+
+    %% Styling
+    style Parallel_Async_Flow fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    style Distribution_Logic fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style Audit_Evaluation fill:#fff3e0,stroke:#e65100
+    style Mesh_Distribution fill:#e8f5e9,stroke:#2e7d32
+    style Ignore fill:#ffebee,stroke:#c62828
