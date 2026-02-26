@@ -1,0 +1,26 @@
+graph TD
+    Start([Start MRD Scheduler]) --> GetToken[Request OAuth Token]
+    GetToken --> InitSearch[Call MG Search API<br/>Initial Request]
+    
+    subgraph Pagination_Loop [Search & Pagination Phase]
+        InitSearch --> CheckResponse{Response Received?}
+        CheckResponse -- Yes --> WriteMGID[Write MGIDs to Temporary DB Table]
+        WriteMGID --> CheckSize{Page Size == 500?}
+        CheckSize -- Yes --> NextPage[Request Next Page<br/>Keep Paging]
+        NextPage --> CheckResponse
+    end
+
+    CheckSize -- No/Complete --> FetchTemp[Fetch all MGIDs from<br/>Temporary DB Table]
+    
+    subgraph Ingestion_Phase [Detail & Ingestion Phase]
+        FetchTemp --> LoopDetail[For Each MGID]
+        LoopDetail --> CallDetail[Call MG Search API<br/>for Detail]
+        CallDetail --> IngestDB[(Write to Ingestion Table)]
+        IngestDB --> LastMGID{Last MGID?}
+        LastMGID -- No --> LoopDetail
+    end
+
+    LastMGID -- Yes --> End([End Process])
+
+    style Pagination_Loop fill:#f9f,stroke:#333,stroke-width:2px
+    style Ingestion_Phase fill:#bbf,stroke:#333,stroke-width:2px
