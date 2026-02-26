@@ -1,0 +1,33 @@
+graph TD
+    Start([New Security Account]) --> Ingest[Ingestion]
+    Ingest --> Master[Mastering Process]
+    Master --> CMF[CMF Service]
+
+    subgraph Parallel_Flow [Parallel Execution]
+        direction TB
+        CMF --> Dist[Distribution Service]
+        CMF --> Audit[Emit Audit Change Event]
+    end
+
+    subgraph Distribution_Logic [Real-Time Enforcement]
+        Dist --> TypeCheck{Is Security?}
+        TypeCheck -->|Yes| QueryDB[(Query Policy DB)]
+        QueryDB --> Existence{In Blocklist?}
+        Existence -->|No| PublishRaw[Publish to Mesh]
+        Existence -->|Yes| ApplyRule{Apply Rule}
+        ApplyRule -->|Block| Terminate([Drop Record])
+        ApplyRule -->|Mask| MaskData[Mask XPath Acc No/Name]
+        MaskData --> PublishMasked[Publish to Mesh]
+    end
+
+    subgraph Policy_Governance [Async Policy Update]
+        Audit --> CheckGrid{Is GRID Blocked?}
+        CheckGrid -->|Yes| EntityCheck{Belongs to HBFR/HBEU?}
+        EntityCheck -->|Yes/No| GlobalAdd[Add Acc + Region + MRDID to Blocklist]
+        GlobalAdd --> ReconReq[Request Republish]
+    end
+
+    %% The Reconciliation Loop
+    ReconReq -.->|Force Re-evaluation| Dist
+    PublishRaw --> Mesh[(MRD Mesh)]
+    PublishMasked --> Mesh
