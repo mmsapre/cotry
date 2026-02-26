@@ -1,0 +1,25 @@
+graph TD
+    Start([Account Updates Ingested]) --> Ingestion[(Ingestion Table)]
+    Ingestion --> Master[Mastering Process]
+    
+    subgraph Parallel_Async_Flow [Async Parallel Processing]
+        Master --> CMF[Create Account CMF]
+        Master --> Audit[Emit Audit Changes]
+    end
+
+    subgraph CMF_Distribution [CMF Distribution & Mesh]
+        CMF --> Distribute[Distribution Service]
+        Distribute --> Mesh[(MRD Mesh)]
+    end
+
+    subgraph Audit_Handling [Audit Policy Evaluation]
+        Audit --> PolicyUpdater[Account Policy Updater]
+        CMF -.->|Event Trigger| PolicyUpdater
+        PolicyUpdater --> Evaluate{Evaluate Event}
+        Evaluate -- "No Change" --> Ignore[Ignore / Terminate]
+    end
+
+    style Parallel_Async_Flow fill:#f3e5f5,stroke:#4a148c
+    style CMF_Distribution fill:#e1f5fe,stroke:#01579b
+    style Audit_Handling fill:#fff3e0,stroke:#e65100
+    style Ignore fill:#ffebee,stroke:#c62828
