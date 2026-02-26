@@ -1,0 +1,38 @@
+graph TD
+    subgraph Manual_Prep [Manual Day 0 / BA Offline Process]
+        ID_Grid[Business & BA Identify Grid<br/>from Production Table] --> ID_Security[Identify Security &<br/>Cash Account]
+        ID_Security --> Seed_Script[Execute Day 0 Script / Seed Configuration]
+        Seed_Script -.-> |Defines Scope| Scheduler
+    end
+
+    subgraph Automated_Pipeline [Automated MRD Reactive Pipeline]
+        Scheduler[MRD Scheduler<br/>Rate Limited] --> SearchAPI[MG Search API]
+        
+        subgraph Ingestion_Stage [R2DBC Persistence]
+            SearchAPI --> TempTable[(Search Temp Table)]
+            SearchAPI --> IngestionTable[(Ingestion Table)]
+        end
+        
+        IngestionTable --> Master[Mastering Process]
+        Master --> CMF[Create Account CMF]
+        
+        subgraph Parallel_Async [Parallel Async Flow]
+            direction TB
+            CMF --> Audit[Emit Audit Changes]
+            CMF --> Distribute[Send to Distribution]
+        end
+    end
+
+    subgraph Evaluation_Distribution [Audit & Mesh]
+        Audit --> PolicyUpdater[Account Policy Updater]
+        PolicyUpdater --> Evaluate{Evaluate}
+        Evaluate -- "No Change" --> Ignore([Ignore])
+        Evaluate -- "Change" --> StoreAudit[(Audit DB)]
+        
+        Distribute --> Mesh[(MRD Mesh)]
+    end
+
+    style Manual_Prep fill:#fff9c4,stroke:#fbc02d,stroke-dasharray: 5 5
+    style Automated_Pipeline fill:#f5f5f5,stroke:#333
+    style Parallel_Async fill:#e1f5fe,stroke:#01579b
+    style Ignore fill:#ffebee,stroke:#c62828
