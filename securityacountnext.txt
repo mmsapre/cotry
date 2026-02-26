@@ -1,0 +1,48 @@
+graph TD
+    Start([New Security Account]) --> Ingest[Ingestion]
+    Ingest --> Master[Mastering Process]
+    Master --> CMF[CMF Service]
+
+    subgraph Parallel_Flow [Parallel Execution]
+        direction TB
+        CMF --> Dist[Distribution Service]
+        CMF --> Audit[Emit Audit Change Event]
+    end
+
+    subgraph Distribution_Logic [Real-Time Enforcement: HBEU Focus]
+        Dist --> TypeCheck{Check Account Type}
+        TypeCheck -->|Security| RegionCheck{Is HBEU?}
+        
+        RegionCheck -->|Yes| QueryPolicy[(Query Blocklist DB)]
+        QueryPolicy --> InBlock{Included?}
+        
+        InBlock -->|Yes| RuleExec{Execute Rule}
+        RuleExec -->|Block| Drop([Block CMF])
+        RuleExec -->|Mask| MaskData[Mask XPath: Acc No & Name]
+        
+        InBlock -->|No| Pass[Publish Raw]
+        RegionCheck -->|No/Other| Pass
+        
+        MaskData --> MeshPub[Publish to Mesh]
+        Pass --> MeshPub
+    end
+
+    subgraph Policy_Governance [Async Cross-Entity Policy Update]
+        Audit --> Details[Extract: Account, Region, MRDID]
+        Details --> CheckHBEU{Is HBEU in Blocklist?}
+        
+        CheckHBEU -->|Yes| SiblingCheck{Does HBFR Sibling Exist?}
+        SiblingCheck -->|Yes| AddBlock[Add HBFR to Blocklist]
+        AddBlock --> TriggerRepub[Trigger Republish Request]
+        
+        CheckHBEU -->|No| Ignore([Ignore])
+    end
+
+    %% Connection Loops
+    TriggerRepub -.->|Reprocess| Dist
+    MeshPub --> Mesh[(MRD Mesh)]
+
+    %% Styling
+    style SiblingCheck fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style Drop fill:#ffebee,stroke:#c62828
+    style MaskData fill:#f3e5f5,stroke:#4a148c
