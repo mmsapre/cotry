@@ -1,0 +1,31 @@
+graph TD
+    %% Primary Ingestion Path
+    Start([New Security Account]) --> Ingest[Ingestion]
+    Ingest --> Master[Mastering Process]
+    Master --> CMF[CMF Service]
+
+    %% Parallel Flow Branching
+    subgraph Parallel_Processing [Parallel Processing]
+        direction TB
+        CMF --> Dist[Distribution]
+        CMF --> Audit[Emit Audit Change Event]
+    end
+
+    %% Distribution Path
+    Dist --> Mesh[Mrd Mesh]
+
+    %% Audit & Policy Path
+    Audit --> DataKey{Data Key}
+    DataKey -->|Extract| Details[mrdid, account, region]
+    Details --> ChangeLog{Change Log}
+    
+    ChangeLog -->|Added Section| CheckAccount[Check Account in 'Add']
+    
+    %% Governance Logic
+    CheckAccount --> InBlocklist{Is Grid in Blocklist?}
+    InBlocklist -->|Yes| AddAction[Add Security Account & Region]
+    InBlocklist -->|No| Ignore[Ignore / No Change]
+    
+    %% Republish Loop
+    AddAction --> Republish[Trigger Republish]
+    Republish --> Dist
