@@ -1,0 +1,26 @@
+flowchart LR
+    subgraph Identification
+        BA[Business / BA / Product] -->|Identify| Grid[Account Grid/Criteria]
+    end
+    
+    subgraph Upload Mechanism
+        Grid --> Choice{Upload Method}
+        Choice -->|Automated| Script[Execution Script]
+        Choice -->|Manual| Portal[Upload Interface]
+        Choice -->|Intelligent| Agent[AI Agents]
+    end
+    
+    subgraph Persistence
+        Script --> Table[(Policy Tables)]
+        Portal --> Table
+        Agent --> Table
+    end
+
+    subgraph Trigger Mechanism
+        Table --> Trigger{Republish Trigger}
+        Trigger -->|Manual/API| RP[Republish Event]
+        Trigger -->|Agent Triggered| RP
+    end
+    
+    RP --> I[Account Policy Updater]
+    I -->|Re-evaluate| M[Mrd Mesh Sync]
