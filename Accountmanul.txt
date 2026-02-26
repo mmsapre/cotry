@@ -1,0 +1,20 @@
+flowchart LR
+    subgraph Identification
+        BA[Business / BA / Product] -->|Identify| Grid[Account Grid/Criteria]
+    end
+    
+    subgraph Upload Mechanism
+        Grid --> Choice{Upload Method}
+        Choice -->|Automated| Script[Execution Script]
+        Choice -->|Manual| Portal[Upload Interface]
+        Choice -->|Intelligent| Agent[AI Agents]
+    end
+    
+    subgraph Processing
+        Agent -->|Parse & Validate| Logic[Validation Logic]
+        Script --> Logic
+        Portal --> Logic
+    end
+    
+    Logic --> Table[(Policy Tables)]
+    Table -.->|Reference| I[Account Policy Updater]
