@@ -1,0 +1,96 @@
+CREATE TABLE dataset.account_master (
+  -- Core identifiers
+  account_id STRING,                 -- internal ID
+  primary_account_number STRING,      -- 0000000000458
+  grid STRING,                        -- 10790447
+
+  source_system STRING,               -- GCS
+  region STRING,                      -- HBFR
+  account_type STRING,                -- Securities
+
+  operational_status STRING,          -- Open
+  sanctions_flag STRING,              -- Y / N
+  sa_usage STRING,                    -- CUSTODY
+
+  ingestion_date DATE,
+  
+    account_names ARRAY<STRUCT<
+    source_system STRING,
+    value STRING
+  >>,
+
+  alternate_identifiers ARRAY<STRUCT<
+    source_system STRING,
+    identifier_name STRING,
+    identifier_value STRING,
+    other_details ARRAY<STRUCT<
+      field_name STRING,
+      field_value STRING
+    >>
+  >>,
+
+  account_flags ARRAY<STRUCT<
+    source_system STRING,
+    flag_name STRING,
+    flag_value STRING
+  >>,
+  
+    party_roles ARRAY<STRUCT<
+    source_system STRING,
+    mrd_party_id STRING,
+    grid STRING,
+    role_type STRING
+  >>,
+  
+    securities_account STRUCT<
+    depository_default_codes ARRAY<STRUCT<
+      source_system STRING,
+      value STRING
+    >>,
+
+    depository_cgos ARRAY<STRUCT<
+      source_system STRING,
+      value STRING
+    >>
+  >,
+  
+    other_account_details ARRAY<STRUCT<
+    source_system STRING,
+    field_name STRING,
+    field_value STRING
+  >>
+)
+PARTITION BY ingestion_date
+CLUSTER BY account_id, primary_account_number, grid;
+
+===
+
+CREATE TABLE dataset.ssi_nested (
+  -- 🔑 TOP-LEVEL FILTERS (MUST be flat)
+  ssi_id STRING,
+  account_id STRING,
+  source_system STRING,
+
+  settlement_method STRING,
+  settlement_place STRING,
+
+  effective_start_ts TIMESTAMP,
+  effective_end_ts TIMESTAMP,
+
+  -- 🔁 Nested Parties
+  parties ARRAY<STRUCT<
+    party_role_type STRING,
+    party_id STRING,
+    party_bic STRING,
+    party_name STRING,
+
+    addresses ARRAY<STRUCT<
+      address_field STRING,
+      address_value STRING
+    >>
+  >>,
+
+  ingestion_date DATE
+)
+PARTITION BY ingestion_date
+CLUSTER BY ssi_id, account_id;
