@@ -1,0 +1,153 @@
+-- Action taken by policy when it matches
+DO $$ BEGIN
+  CREATE TYPE policy_action AS ENUM ('PASS','FILTER','FULL_MASK','PARTIAL_MASK');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- How the policy is evaluated
+DO $$ BEGIN
+  CREATE TYPE policy_type AS ENUM ('DATABASE','LOCAL_PATH','LOCAL_JSON_LOGIC');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Where the policy applies
+DO $$ BEGIN
+  CREATE TYPE destination_type AS ENUM ('ANY','CLOUD','PLATFORM','CONSUMER');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Operator for criteria
+DO $$ BEGIN
+  CREATE TYPE criteria_operator AS ENUM ('EQ','NE','IN','LIKE','GT','LT','GTE','LTE');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Source of criteria value (payload extraction vs runtime/system/header)
+DO $$ BEGIN
+  CREATE TYPE criteria_source AS ENUM ('PAYLOAD','HEADER','SYSTEM');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Path types for masking/extraction
+DO $$ BEGIN
+  CREATE TYPE path_type AS ENUM ('JSON_PATH','XPATH');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Mask include/exclude
+DO $$ BEGIN
+  CREATE TYPE mask_type AS ENUM ('INCLUDE','EXCLUDE');
+EXCEPTION WHEN duplicate_object THEN NULL; 
+
+
+CREATE TABLE IF NOT EXISTS graavl_policy_metadata (
+  policy_id         BIGSERIAL PRIMARY KEY,
+
+  policy_key        VARCHAR(120) NOT NULL,           -- stable name like ISIN_LICENSED_BLOCK_ALICLOUD
+  domain            VARCHAR(100) NOT NULL,           -- e.g. INSTRUMENT, ACCOUNT
+  service_name      VARCHAR(120) NOT NULL,           -- e.g. dist-instrument-service
+
+  priority          INTEGER NOT NULL CHECK (priority BETWEEN 1 AND 10),
+
+  result_action     policy_action NOT NULL,          -- PASS/FILTER/FULL_MASK/PARTIAL_MASK
+  policy_type       policy_type NOT NULL DEFAULT 'DATABASE',
+
+  -- Destination scoping (AliCloud etc.)
+  destination_type  destination_type NOT NULL DEFAULT 'ANY',
+  destination_key   VARCHAR(120),                    -- e.g. 'ALICLOUD' when destination_type=CLOUD
+
+  -- Optional json-logic for additional matching conditions
+  json_logic        TEXT,
+
+  enabled           BOOLEAN NOT NULL DEFAULT TRUE,
+  description       TEXT,
+
+  created_by        VARCHAR(80),
+  created_at        TIMESTAMP NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMP
+);
+
+-- Uniqueness
+CREATE UNIQUE INDEX IF NOT EXISTS ux_policy_key_scope
+  ON graavl_policy_metadata(domain, service_name, destination_type, COALESCE(destination_key,''), policy_key);
+
+-- Fast lookup
+CREATE INDEX IF NOT EXISTS ix_policy_scope
+  ON graavl_policy_metadata(domain, service_name, destination_type, destination_key, enabled, priority);
+
+
+CREATE TABLE IF NOT EXISTS graavl_policy_criteria (
+  criteria_id     BIGSERIAL PRIMARY KEY,
+
+  policy_id       BIGINT NOT NULL REFERENCES graavl_policy_metadata(policy_id) ON DELETE CASCADE,
+
+  criteria_key    VARCHAR(150) NOT NULL,           -- e.g. 'instrument.isin', 'account.number', 'distribution.cloud'
+  operator        criteria_operator NOT NULL,      -- EQ/IN/LIKE/...
+  source_type     criteria_source NOT NULL DEFAULT 'PAYLOAD',  -- PAYLOAD/HEADER/SYSTEM
+
+  data_type       VARCHAR(30) DEFAULT 'STRING',    -- STRING/BOOLEAN/NUMBER/DATE (informational)
+  required        BOOLEAN NOT NULL DEFAULT TRUE,   -- if true and extractor returns nothing -> policy cannot match
+
+  created_at      TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_criteria_policy
+  ON graavl_policy_criteria(policy_id);
+
+CREATE INDEX IF NOT EXISTS ix_criteria_key
+  ON graavl_policy_criteria(criteria_key);
+
+
+
+CREATE TABLE IF NOT EXISTS graavl_policy_criteria_values (
+  value_id        BIGSERIAL PRIMARY KEY,
+
+  criteria_id     BIGINT NOT NULL REFERENCES graavl_policy_criteria(criteria_id) ON DELETE CASCADE,
+
+  criteria_value  VARCHAR(400) NOT NULL,
+
+  created_at      TIMESTAMP NOT NULL DEFAULT now()
+);
+
+-- Avoid duplicates
+CREATE UNIQUE INDEX IF NOT EXISTS ux_criteria_value_unique
+  ON graavl_policy_criteria_values(criteria_id, criteria_value);
+
+-- Fast IN matching
+CREATE INDEX IF NOT EXISTS ix_criteria_value_lookup
+  ON graavl_policy_criteria_values(
+
+
+
+CREATE TABLE IF NOT EXISTS graavl_policy_mask_paths (
+  mask_id       BIGSERIAL PRIMARY KEY,
+
+  policy_id     BIGINT NOT NULL REFERENCES graavl_policy_metadata(policy_id) ON DELETE CASCADE,
+
+  mask_type     mask_type NOT NULL,         -- INCLUDE/EXCLUDE
+  path_type     path_type NOT NULL,         -- JSON_PATH/XPATH
+  mask_path     VARCHAR(800) NOT NULL,
+
+  created_at    TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_mask_paths_policy
+  ON graavl_policy_mask_paths(policy_id);
+
+CREATE INDEX IF NOT EXISTS ix_mask_paths_lookup
+  ON graavl_policy_mask_paths(path_type, mask_type);
+
+CREATE TABLE IF NOT EXISTS graavl_policy_lookup_values (
+  lookup_id     BIGSERIAL PRIMARY KEY,
+
+  policy_id     BIGINT NOT NULL REFERENCES graavl_policy_metadata(policy_id) ON DELETE CASCADE,
+
+  lookup_key    VARCHAR(150) NOT NULL,      -- e.g. 'licensed_isin'
+  lookup_value  VARCHAR(200) NOT NULL,      -- e.g. 'US0378331005'
+
+  created_at    TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_lookup_unique
+  ON graavl_policy_lookup_values(policy_id, lookup_key, lookup_value);
+
+CREATE INDEX IF NOT EXISTS ix_lookup_key_value
+  ON graavl_policy_lookup_values(lookup_key, lookup_value);
+
+
+
+
